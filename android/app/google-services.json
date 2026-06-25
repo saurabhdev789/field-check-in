@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "574546262166",
+    "project_id": "field-agent-b9e55",
+    "storage_bucket": "field-agent-b9e55.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:574546262166:android:b583eaac46fe1652db2ab7",
+        "android_client_info": {
+          "package_name": "com.fieldagentcheckin"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC7kGtn9oQO8Nbh32TNL4pG51R_o5yW-DY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

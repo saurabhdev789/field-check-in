@@ -1,79 +1,124 @@
-This is a new [**React Native**](https://reactnative.dev) project, bootstrapped using [`@react-native-community/cli`](https://github.com/react-native-community/cli).
+# Field Check-In
 
-# Getting Started
+React Native Android app for field agents to capture a photo, GPS coordinate, and short note, then upload the check-in with an offline-first queue.
 
->**Note**: Make sure you have completed the [React Native - Environment Setup](https://reactnative.dev/docs/environment-setup) instructions till "Creating a new application" step, before proceeding.
+## Features
 
-## Step 1: Start the Metro Server
+- Camera and location permission flows with rationale, first denial, permanent denial, and Settings redirect.
+- Persistent offline queue backed by AsyncStorage, surviving app restarts.
+- Visible queue status for `pending`, `uploading`, `success`, and `failed`.
+- Automatic sync on connectivity changes with NetInfo.
+- Firebase Firestore backend storing compressed photo payloads and check-in records.
+- Background sync/retry awareness through `react-native-background-fetch`.
+- Exponential retry backoff with jitter and a 30 minute cap.
+- Partial failure safe uploads: each queued item is uploaded independently, so successful items are marked `success` and are not retried when other items fail.
+- Biometric setup prompt through `react-native-biometrics`.
+- Live route map screen using `react-native-geolocation-service` and `react-native-maps`.
 
-First, you will need to start **Metro**, the JavaScript _bundler_ that ships _with_ React Native.
-
-To start Metro, run the following command from the _root_ of your React Native project:
-
-```bash
-# using npm
-npm start
-
-# OR using Yarn
-yarn start
-```
-
-## Step 2: Start your Application
-
-Let Metro Bundler run in its _own_ terminal. Open a _new_ terminal from the _root_ of your React Native project. Run the following command to start your _Android_ or _iOS_ app:
-
-### For Android
+## Setup
 
 ```bash
-# using npm
+npm install
 npm run android
-
-# OR using Yarn
-yarn android
 ```
 
-### For iOS
+For Maps, replace `YOUR_GOOGLE_MAPS_API_KEY` in `android/app/src/main/res/values/strings.xml` with a Google Maps Android SDK key.
+
+For Firebase:
+
+1. Create a Firebase project.
+2. Add an Android app with package name `com.fieldagentcheckin`.
+3. Download `google-services.json`.
+4. Place it at `android/app/google-services.json`.
+5. Enable Firestore in the Firebase console. Firebase Storage is not required for this demo build.
+
+Backend writes are centralized in `src/services/backend.ts`. The offline queue stores the local photo URI, then upload reads the file and stores a compressed base64 photo directly in the Firestore `checkIns` collection with the note, location, retry metadata, and audit trail.
+
+## Android APK
+
+Build a debug APK:
 
 ```bash
-# using npm
-npm run ios
-
-# OR using Yarn
-yarn ios
+cd android
+./gradlew assembleDebug
 ```
 
-If everything is set up _correctly_, you should see your new app running in your _Android Emulator_ or _iOS Simulator_ shortly provided you have set up your emulator/simulator correctly.
+APK output:
 
-This is one way to run your app — you can also run it directly from within Android Studio and Xcode respectively.
+```text
+android/app/build/outputs/apk/debug/app-debug.apk
+```
 
-## Step 3: Modifying your App
+Google Drive APK link: add the uploaded APK URL here before submission.
 
-Now that you have successfully run the app, let's modify it.
+## Queue State Machine
 
-1. Open `App.tsx` in your text editor of choice and edit some lines.
-2. For **Android**: Press the <kbd>R</kbd> key twice or select **"Reload"** from the **Developer Menu** (<kbd>Ctrl</kbd> + <kbd>M</kbd> (on Window and Linux) or <kbd>Cmd ⌘</kbd> + <kbd>M</kbd> (on macOS)) to see your changes!
+```text
+created -> pending -> uploading -> success
+                     -> failed -> pending after nextAttemptAt
+```
 
-   For **iOS**: Hit <kbd>Cmd ⌘</kbd> + <kbd>R</kbd> in your iOS Simulator to reload the app and see your changes!
+`pending` items are eligible for sync when the device is online. `uploading` is a transient in-flight state. `success` items stay in the local history and are skipped by future syncs. `failed` items store `attempts`, `lastError`, and `nextAttemptAt`; once the backoff window expires, they return to `pending`.
 
-## Congratulations! :tada:
+The sync worker processes at most 5 ready items per pass. Each item is committed independently, so if a batch of 5 has 3 successful uploads and 2 failures, only the 2 failures get retry metadata. The 3 successful items remain `success` and are never re-uploaded.
 
-You've successfully run and modified your React Native App. :partying_face:
+## Permission Handling
 
-### Now what?
+`src/services/permissions.ts` centralizes camera and location checks:
 
-- If you want to add this new React Native code to an existing application, check out the [Integration guide](https://reactnative.dev/docs/integration-with-existing-apps).
-- If you're curious to learn more about React Native, check out the [Introduction to React Native](https://reactnative.dev/docs/getting-started).
+- Shows a rationale dialog before asking the OS.
+- Handles first denial with a visible status message.
+- Handles permanent denial by opening the app Settings screen.
+- Writes current camera/location state into the check-in screen UI.
 
-# Troubleshooting
+## PII Handling Strategy
 
-If you can't get this to work, see the [Troubleshooting](https://reactnative.dev/docs/troubleshooting) page.
+- Photos are compressed on capture. The AsyncStorage queue stores the photo URI, and Firestore stores the base64 image for this assignment build.
+- Firestore documents have a 1 MiB size limit, so production photo uploads should use Firebase Storage, Cloud Storage, or another object store.
+- GPS coordinates are captured only when the agent submits or starts route tracking.
+- The queue stores the minimum fields needed for retry and auditability: note, photo URI, coordinate, timestamps, attempts, and upload status.
+- No tokens or secrets are hardcoded. The Firebase Android config is supplied through `android/app/google-services.json`, and the Google Maps key should be build-time configuration in production.
+- The README intentionally documents where PII flows: `src/services/backend.ts`, `src/services/location.ts`, and `src/services/queueStore.ts`.
 
-# Learn More
+## Audit Trail Design
 
-To learn more about React Native, take a look at the following resources:
+Each `CheckInItem` includes an `auditTrail` array with timestamped events:
 
-- [React Native Website](https://reactnative.dev) - learn more about React Native.
-- [Getting Started](https://reactnative.dev/docs/environment-setup) - an **overview** of React Native and how setup your environment.
-- [Learn the Basics](https://reactnative.dev/docs/getting-started) - a **guided tour** of the React Native **basics**.
-- [Blog](https://reactnative.dev/blog) - read the latest official React Native **Blog** posts.
-- [`@facebook/react-native`](https://github.com/facebook/react-native) - the Open Source; GitHub **repository** for React Native.
+- `created`
+- `queued`
+- `upload_started`
+- `upload_success`
+- `upload_failed`
+- `permission_denied`
+- `permission_blocked`
+
+This gives reviewers a local chronological record for every check-in. A production backend should persist these audit events server-side after upload and include the authenticated agent ID.
+
+## Document Cleanup Approach
+
+Before release:
+
+- Move backend URL and Google Maps key to environment-specific config.
+- Confirm Firebase Security Rules restrict `checkIns` to authenticated field agents and reviewers.
+- Move full-resolution photos from Firestore documents to object storage in production.
+- Replace the debug signing config with a release keystore.
+- Decide queue retention policy for successful items, such as keeping the last 30 days or clearing after server acknowledgement.
+- Add encrypted-at-rest policy for sensitive queues if required by the deployment environment.
+- Remove development endpoints and generated sample comments.
+
+## Test And Verification
+
+```bash
+npx tsc --noEmit
+npm run lint
+npm test
+```
+
+Manual Android checks:
+
+- Fresh install, grant camera/location, submit while online.
+- Deny camera once and confirm the visible denial state.
+- Permanently deny location, then confirm Settings redirect.
+- Submit several check-ins while offline, kill and reopen the app, then verify queue persistence.
+- Restore connectivity and confirm only failed items retry after backoff.
+- Start and stop live route tracking on the Route Map screen.
