@@ -1,9 +1,10 @@
 import firestore from '@react-native-firebase/firestore';
 import RNFS from 'react-native-fs';
 
-import {CheckInItem} from '../types/checkIn';
+import {CheckInItem, Coordinates} from '../types/checkIn';
 
 const CHECK_INS_COLLECTION = 'checkIns';
+const ROUTE_POINTS_COLLECTION = 'routePoints';
 const MAX_FIRESTORE_PHOTO_BASE64_BYTES = 700_000;
 
 function normalizeFilePath(uri: string) {
@@ -31,10 +32,11 @@ export async function uploadCheckIn(item: CheckInItem) {
         },
         location: {
           latitude: item.location.latitude,
-          longitude: item.location.longitude,
-          accuracy: item.location.accuracy ?? null,
-          capturedAt: item.location.capturedAt,
-        },
+        longitude: item.location.longitude,
+        accuracy: item.location.accuracy ?? null,
+        heading: item.location.heading ?? null,
+        capturedAt: item.location.capturedAt,
+      },
         clientCreatedAt: item.createdAt,
         clientUpdatedAt: item.updatedAt,
         attempts: item.attempts,
@@ -43,4 +45,21 @@ export async function uploadCheckIn(item: CheckInItem) {
       },
       {merge: true},
     );
+}
+
+export async function uploadRoutePoint(sessionId: string, point: Coordinates) {
+  await firestore()
+    .collection(ROUTE_POINTS_COLLECTION)
+    .add({
+      sessionId,
+      location: {
+        latitude: point.latitude,
+        longitude: point.longitude,
+        accuracy: point.accuracy ?? null,
+        heading: point.heading ?? null,
+        capturedAt: point.capturedAt,
+      },
+      clientCreatedAt: point.capturedAt,
+      uploadedAt: firestore.FieldValue.serverTimestamp(),
+    });
 }

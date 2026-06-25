@@ -4,6 +4,7 @@ export type Coordinates = {
   latitude: number;
   longitude: number;
   accuracy?: number;
+  heading?: number;
   capturedAt: string;
 };
 

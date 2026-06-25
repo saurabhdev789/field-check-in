@@ -8,7 +8,7 @@ React Native Android app for field agents to capture a photo, GPS coordinate, an
 - Persistent offline queue backed by AsyncStorage, surviving app restarts.
 - Visible queue status for `pending`, `uploading`, `success`, and `failed`.
 - Automatic sync on connectivity changes with NetInfo.
-- Firebase Firestore backend storing compressed photo payloads and check-in records.
+- Firebase Firestore backend storing compressed photo payloads, check-in records, and route points.
 - Background sync/retry awareness through `react-native-background-fetch`.
 - Exponential retry backoff with jitter and a 30 minute cap.
 - Partial failure safe uploads: each queued item is uploaded independently, so successful items are marked `success` and are not retried when other items fail.
@@ -32,7 +32,7 @@ For Firebase:
 4. Place it at `android/app/google-services.json`.
 5. Enable Firestore in the Firebase console. Firebase Storage is not required for this demo build.
 
-Backend writes are centralized in `src/services/backend.ts`. The offline queue stores the local photo URI, then upload reads the file and stores a compressed base64 photo directly in the Firestore `checkIns` collection with the note, location, retry metadata, and audit trail.
+Backend writes are centralized in `src/services/backend.ts`. The offline queue stores the local photo URI, then upload reads the file and stores a compressed base64 photo directly in the Firestore `checkIns` collection with the note, location, retry metadata, and audit trail. Live route tracking writes each captured point to the Firestore `routePoints` collection with a route session id, coordinate, accuracy, client timestamp, and server timestamp.
 
 ## Android APK
 
@@ -75,7 +75,7 @@ The sync worker processes at most 5 ready items per pass. Each item is committed
 
 - Photos are compressed on capture. The AsyncStorage queue stores the photo URI, and Firestore stores the base64 image for this assignment build.
 - Firestore documents have a 1 MiB size limit, so production photo uploads should use Firebase Storage, Cloud Storage, or another object store.
-- GPS coordinates are captured only when the agent submits or starts route tracking.
+- GPS coordinates are captured when the agent submits or starts route tracking. Check-in coordinates are queued locally; route points are sent to Firestore as live tracking events.
 - The queue stores the minimum fields needed for retry and auditability: note, photo URI, coordinate, timestamps, attempts, and upload status.
 - No tokens or secrets are hardcoded. The Firebase Android config is supplied through `android/app/google-services.json`, and the Google Maps key should be build-time configuration in production.
 - The README intentionally documents where PII flows: `src/services/backend.ts`, `src/services/location.ts`, and `src/services/queueStore.ts`.
@@ -99,7 +99,7 @@ This gives reviewers a local chronological record for every check-in. A producti
 Before release:
 
 - Move backend URL and Google Maps key to environment-specific config.
-- Confirm Firebase Security Rules restrict `checkIns` to authenticated field agents and reviewers.
+- Confirm Firebase Security Rules restrict `checkIns` and `routePoints` to authenticated field agents and reviewers.
 - Move full-resolution photos from Firestore documents to object storage in production.
 - Replace the debug signing config with a release keystore.
 - Decide queue retention policy for successful items, such as keeping the last 30 days or clearing after server acknowledgement.
@@ -121,4 +121,4 @@ Manual Android checks:
 - Permanently deny location, then confirm Settings redirect.
 - Submit several check-ins while offline, kill and reopen the app, then verify queue persistence.
 - Restore connectivity and confirm only failed items retry after backoff.
-- Start and stop live route tracking on the Route Map screen.
+- Start and stop live route tracking on the Route Map screen, then confirm route points are written to the `routePoints` Firestore collection.

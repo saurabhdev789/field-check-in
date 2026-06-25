@@ -11,6 +11,7 @@ function toCoordinates(position: {
     latitude: number;
     longitude: number;
     accuracy?: number;
+    heading?: number | null;
   };
   timestamp: number;
 }): Coordinates {
@@ -18,6 +19,10 @@ function toCoordinates(position: {
     latitude: position.coords.latitude,
     longitude: position.coords.longitude,
     accuracy: position.coords.accuracy,
+    heading:
+      typeof position.coords.heading === 'number' && position.coords.heading >= 0
+        ? position.coords.heading
+        : undefined,
     capturedAt: new Date(position.timestamp).toISOString(),
   };
 }

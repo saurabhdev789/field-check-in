@@ -1,10 +1,11 @@
-import React, {useEffect, useState} from 'react';
+import React, {useEffect, useRef, useState} from 'react';
 import {Pressable, StyleSheet, Text, View} from 'react-native';
 import MapView, {Marker, Polyline, Region} from 'react-native-maps';
 import Geolocation from 'react-native-geolocation-service';
 
 import {ensurePermission, getPermissionState} from '../services/permissions';
 import {saveLastKnownCoordinates} from '../services/location';
+import {uploadRoutePoint} from '../services/backend';
 import {Coordinates} from '../types/checkIn';
 
 const initialRegion: Region = {
@@ -14,10 +15,46 @@ const initialRegion: Region = {
   longitudeDelta: 0.02,
 };
 
+function createRouteSessionId() {
+  return `route-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function toRadians(value: number) {
+  return (value * Math.PI) / 180;
+}
+
+function toDegrees(value: number) {
+  return (value * 180) / Math.PI;
+}
+
+function bearingBetween(from: Coordinates, to: Coordinates) {
+  const fromLat = toRadians(from.latitude);
+  const toLat = toRadians(to.latitude);
+  const deltaLng = toRadians(to.longitude - from.longitude);
+  const y = Math.sin(deltaLng) * Math.cos(toLat);
+  const x =
+    Math.cos(fromLat) * Math.sin(toLat) -
+    Math.sin(fromLat) * Math.cos(toLat) * Math.cos(deltaLng);
+
+  return (toDegrees(Math.atan2(y, x)) + 360) % 360;
+}
+
+function formatDirection(heading?: number) {
+  if (heading === undefined) {
+    return 'Direction pending';
+  }
+
+  const labels = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+  const index = Math.round(heading / 45) % labels.length;
+  return `${labels[index]} ${Math.round(heading)}°`;
+}
+
 export default function RouteMapScreen() {
   const [points, setPoints] = useState<Coordinates[]>([]);
   const [status, setStatus] = useState('Waiting for location permission');
   const [watchId, setWatchId] = useState<number | null>(null);
+  const [routeSessionId] = useState(createRouteSessionId);
+  const pointsRef = useRef<Coordinates[]>([]);
 
   useEffect(() => {
     let isMounted = true;
@@ -62,16 +99,28 @@ export default function RouteMapScreen() {
 
     const id = Geolocation.watchPosition(
       position => {
-        const nextPoint = {
+        const rawHeading =
+          typeof position.coords.heading === 'number' && position.coords.heading >= 0
+            ? position.coords.heading
+            : undefined;
+        const nextPoint: Coordinates = {
           latitude: position.coords.latitude,
           longitude: position.coords.longitude,
           accuracy: position.coords.accuracy,
+          heading: rawHeading,
           capturedAt: new Date(position.timestamp).toISOString(),
+        };
+        const previous = pointsRef.current[pointsRef.current.length - 1];
+        const pointToSave = {
+          ...nextPoint,
+          heading: nextPoint.heading ?? (previous ? bearingBetween(previous, nextPoint) : undefined),
         };
 
         setStatus('Live tracking');
-        saveLastKnownCoordinates(nextPoint).catch(() => undefined);
-        setPoints(current => [...current, nextPoint]);
+        pointsRef.current = [...pointsRef.current, pointToSave];
+        setPoints(pointsRef.current);
+        saveLastKnownCoordinates(pointToSave).catch(() => undefined);
+        uploadRoutePoint(routeSessionId, pointToSave).catch(() => undefined);
       },
       error => setStatus(error.message),
       {
@@ -95,6 +144,7 @@ export default function RouteMapScreen() {
   }
 
   const latest = points[points.length - 1];
+  const directionLabel = formatDirection(latest?.heading);
   const region = latest
     ? {
         latitude: latest.latitude,
@@ -107,7 +157,14 @@ export default function RouteMapScreen() {
   return (
     <View style={styles.container}>
       <MapView style={styles.map} region={region} showsUserLocation>
-        {latest ? <Marker coordinate={latest} title="Current location" /> : null}
+        {latest ? (
+          <Marker
+            coordinate={latest}
+            rotation={latest.heading}
+            title="Current location"
+            description={directionLabel}
+          />
+        ) : null}
         {points.length > 1 ? (
           <Polyline coordinates={points} strokeColor="#1d6f61" strokeWidth={5} />
         ) : null}
@@ -116,6 +173,7 @@ export default function RouteMapScreen() {
         <View>
           <Text style={styles.status}>{status}</Text>
           <Text style={styles.meta}>{points.length} route points captured</Text>
+          <Text style={styles.meta}>{directionLabel}</Text>
         </View>
         <Pressable
           style={watchId === null ? styles.startButton : styles.stopButton}
