@@ -18,6 +18,7 @@ import {RootStackParamList} from '../../App';
 import {setupBiometrics} from '../services/biometrics';
 import {ensurePermission} from '../services/permissions';
 import {getCurrentCoordinates} from '../services/location';
+import {getAgentId} from '../services/agentIdentity';
 import {queueStore} from '../services/queueStore';
 import {syncQueue, watchConnectivity} from '../services/syncQueue';
 import {CheckInItem, PermissionUiState} from '../types/checkIn';
@@ -37,6 +38,7 @@ export default function CheckInScreen({navigation}: Props) {
     location: 'Not checked',
   });
   const [networkLabel, setNetworkLabel] = useState('Checking network');
+  const [agentId] = useState(getAgentId);
   const [biometricLabel, setBiometricLabel] = useState('Not set up');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -123,6 +125,7 @@ export default function CheckInScreen({navigation}: Props) {
       const now = new Date().toISOString();
       const checkIn: CheckInItem = {
         id: createId(),
+        agentId,
         note: note.trim(),
         photoUri: photo.uri,
         photoFileName: photo.fileName,
@@ -157,6 +160,7 @@ export default function CheckInScreen({navigation}: Props) {
         <View>
           <Text style={styles.kicker}>Agent status</Text>
           <Text style={styles.network}>{networkLabel}</Text>
+          <Text style={styles.meta}>{agentId}</Text>
         </View>
         <Pressable style={styles.secondaryButton} onPress={() => navigation.navigate('RouteMap')}>
           <Text style={styles.secondaryButtonText}>Route Map</Text>

@@ -10,6 +10,7 @@ export type Coordinates = {
 
 export type CheckInItem = {
   id: string;
+  agentId: string;
   note: string;
   photoUri: string;
   photoFileName?: string;

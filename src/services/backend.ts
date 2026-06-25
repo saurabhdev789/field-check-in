@@ -2,6 +2,7 @@ import firestore from '@react-native-firebase/firestore';
 import RNFS from 'react-native-fs';
 
 import {CheckInItem, Coordinates} from '../types/checkIn';
+import {getAgentId} from './agentIdentity';
 
 const CHECK_INS_COLLECTION = 'checkIns';
 const ROUTE_POINTS_COLLECTION = 'routePoints';
@@ -24,6 +25,7 @@ export async function uploadCheckIn(item: CheckInItem) {
     .set(
       {
         id: item.id,
+        agentId: item.agentId ?? getAgentId(),
         note: item.note,
         photo: {
           base64: photoBase64,
@@ -51,6 +53,7 @@ export async function uploadRoutePoint(sessionId: string, point: Coordinates) {
   await firestore()
     .collection(ROUTE_POINTS_COLLECTION)
     .add({
+      agentId: getAgentId(),
       sessionId,
       location: {
         latitude: point.latitude,
