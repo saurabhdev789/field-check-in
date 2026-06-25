@@ -1,5 +1,5 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import {CheckInItem, UploadStatus} from '../types/checkIn';
+import {localStorage} from './localStorage';
 
 type Listener = (items: CheckInItem[]) => void;
 
@@ -11,11 +11,11 @@ class QueueStore {
 
   async hydrate() {
     try {
-      const raw = await AsyncStorage.getItem(QUEUE_KEY);
+      const raw = localStorage.getString(QUEUE_KEY);
       this.items = raw ? JSON.parse(raw) : [];
     } catch {
       this.items = [];
-      await AsyncStorage.removeItem(QUEUE_KEY);
+      localStorage.remove(QUEUE_KEY);
     }
     this.emit();
   }
@@ -105,7 +105,7 @@ class QueueStore {
   }
 
   private async persist() {
-    await AsyncStorage.setItem(QUEUE_KEY, JSON.stringify(this.items));
+    localStorage.set(QUEUE_KEY, JSON.stringify(this.items));
     this.emit();
   }
 

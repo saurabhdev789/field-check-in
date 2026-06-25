@@ -5,7 +5,7 @@ React Native Android app for field agents to capture a photo, GPS coordinate, an
 ## Features
 
 - Camera and location permission flows with rationale, first denial, permanent denial, and Settings redirect.
-- Persistent offline queue backed by AsyncStorage, surviving app restarts.
+- Persistent offline queue backed by MMKV, surviving app restarts.
 - Visible queue status for `pending`, `uploading`, `success`, and `failed`.
 - Automatic sync on connectivity changes with NetInfo.
 - Firebase Firestore backend storing compressed photo payloads, check-in records, and route points.
@@ -73,7 +73,7 @@ The sync worker processes at most 5 ready items per pass. Each item is committed
 
 ## PII Handling Strategy
 
-- Photos are compressed on capture. The AsyncStorage queue stores the photo URI, and Firestore stores the base64 image for this assignment build.
+- Photos are compressed on capture. The MMKV queue stores the photo URI, and Firestore stores the base64 image for this assignment build.
 - Firestore documents have a 1 MiB size limit, so production photo uploads should use Firebase Storage, Cloud Storage, or another object store.
 - GPS coordinates are captured when the agent submits or starts route tracking. Check-in coordinates are queued locally; route points are sent to Firestore as live tracking events.
 - The queue stores the minimum fields needed for retry and auditability: note, photo URI, coordinate, timestamps, attempts, and upload status.

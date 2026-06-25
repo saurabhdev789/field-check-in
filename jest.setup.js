@@ -21,18 +21,18 @@ jest.mock('react-native-fs', () => ({
   readFile: jest.fn(() => Promise.resolve('base64-photo')),
 }));
 
-jest.mock('@react-native-async-storage/async-storage', () => {
+jest.mock('react-native-mmkv', () => {
   const store = new Map();
   return {
-    getItem: jest.fn(key => Promise.resolve(store.get(key) ?? null)),
-    setItem: jest.fn((key, value) => {
-      store.set(key, value);
-      return Promise.resolve();
-    }),
-    removeItem: jest.fn(key => {
-      store.delete(key);
-      return Promise.resolve();
-    }),
+    createMMKV: jest.fn(() => ({
+      getString: jest.fn(key => store.get(key)),
+      set: jest.fn((key, value) => {
+        store.set(key, value);
+      }),
+      remove: jest.fn(key => {
+        store.delete(key);
+      }),
+    })),
   };
 });
 

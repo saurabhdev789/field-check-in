@@ -1,6 +1,6 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import Geolocation from 'react-native-geolocation-service';
 import {Coordinates} from '../types/checkIn';
+import {localStorage} from './localStorage';
 
 const LAST_KNOWN_LOCATION_KEY = 'field-check-in.last-known-location.v1';
 
@@ -42,11 +42,11 @@ function requestCoordinates(options: LocationOptions): Promise<Coordinates> {
 }
 
 export async function saveLastKnownCoordinates(coordinates: Coordinates) {
-  await AsyncStorage.setItem(LAST_KNOWN_LOCATION_KEY, JSON.stringify(coordinates));
+  localStorage.set(LAST_KNOWN_LOCATION_KEY, JSON.stringify(coordinates));
 }
 
 export async function getLastKnownCoordinates() {
-  const raw = await AsyncStorage.getItem(LAST_KNOWN_LOCATION_KEY);
+  const raw = localStorage.getString(LAST_KNOWN_LOCATION_KEY);
   return raw ? (JSON.parse(raw) as Coordinates) : undefined;
 }
 
