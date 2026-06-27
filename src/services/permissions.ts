@@ -27,14 +27,14 @@ export async function getPermissionState(kind: PermissionKind) {
   const result = await check(permissionFor(kind));
 
   if (result === RESULTS.GRANTED || result === RESULTS.LIMITED) {
-    return {granted: true, message: `${kind} permission granted`};
+    return {granted: true, message: `${labelFor(kind)} allowed`};
   }
 
   if (result === RESULTS.BLOCKED) {
-    return {granted: false, message: `${kind} permission blocked`};
+    return {granted: false, message: 'Allow in Settings'};
   }
 
-  return {granted: false, message: `${kind} permission not granted`};
+  return {granted: false, message: `Please allow ${labelFor(kind).toLowerCase()}`};
 }
 
 export async function ensurePermission(kind: PermissionKind) {
@@ -42,39 +42,43 @@ export async function ensurePermission(kind: PermissionKind) {
   const existing = await check(permission);
 
   if (existing === RESULTS.GRANTED || existing === RESULTS.LIMITED) {
-    return {granted: true, message: `${kind} granted`};
+    return {granted: true, message: `${labelFor(kind)} allowed`};
   }
 
   if (existing === RESULTS.BLOCKED) {
     showSettingsDialog(kind);
-    return {granted: false, message: `${kind} permanently denied. Open Settings to enable it.`};
+    return {granted: false, message: 'Allow in Settings'};
   }
 
   const rationale = await showRationale(kind);
   if (!rationale) {
-    return {granted: false, message: `${kind} permission rationale dismissed`};
+    return {granted: false, message: `Please allow ${labelFor(kind).toLowerCase()}`};
   }
 
   const result = await request(permission);
   if (result === RESULTS.GRANTED || result === RESULTS.LIMITED) {
-    return {granted: true, message: `${kind} granted`};
+    return {granted: true, message: `${labelFor(kind)} allowed`};
   }
 
   if (result === RESULTS.BLOCKED) {
     showSettingsDialog(kind);
-    return {granted: false, message: `${kind} permanently denied. Open Settings to enable it.`};
+    return {granted: false, message: 'Allow in Settings'};
   }
 
-  return {granted: false, message: `${kind} denied. You can try again when ready.`};
+  return {granted: false, message: `Please allow ${labelFor(kind).toLowerCase()}`};
+}
+
+function labelFor(kind: PermissionKind) {
+  return kind === 'camera' ? 'Camera' : 'Location';
 }
 
 function showRationale(kind: PermissionKind) {
   return new Promise<boolean>(resolve => {
     Alert.alert(
-      `${kind === 'camera' ? 'Camera' : 'Location'} permission needed`,
+      `Allow ${labelFor(kind)}`,
       kind === 'camera'
-        ? 'A check-in needs a site photo so reviewers can verify the visit.'
-        : 'A check-in needs GPS coordinates for auditability and route tracking.',
+        ? 'The app needs camera access for check-in photos.'
+        : 'The app needs location access for check-ins and routes.',
       [
         {text: 'Not now', style: 'cancel', onPress: () => resolve(false)},
         {text: 'Continue', onPress: () => resolve(true)},
@@ -85,8 +89,8 @@ function showRationale(kind: PermissionKind) {
 
 function showSettingsDialog(kind: PermissionKind) {
   Alert.alert(
-    `${kind === 'camera' ? 'Camera' : 'Location'} blocked`,
-    'Permission is permanently denied. Open Settings and enable it to continue.',
+    `Allow ${labelFor(kind)} in Settings`,
+    `Open Settings, then turn on ${labelFor(kind).toLowerCase()} access.`,
     [
       {text: 'Cancel', style: 'cancel'},
       {

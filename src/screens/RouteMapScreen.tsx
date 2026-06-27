@@ -7,6 +7,11 @@ import {ensurePermission, getPermissionState} from '../services/permissions';
 import {saveLastKnownCoordinates} from '../services/location';
 import {uploadRoutePoint} from '../services/backend';
 import {Coordinates} from '../types/checkIn';
+import {
+  getRouteSessionId,
+  getSavedRoutePoints,
+  saveRoutePoints,
+} from '../services/routeStore';
 
 const initialRegion: Region = {
   latitude: 28.6139,
@@ -14,10 +19,8 @@ const initialRegion: Region = {
   latitudeDelta: 0.02,
   longitudeDelta: 0.02,
 };
-
-function createRouteSessionId() {
-  return `route-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-}
+const MIN_ROUTE_DISTANCE_METERS = 1;
+const MAX_NOISE_DISTANCE_METERS = 10;
 
 function toRadians(value: number) {
   return (value * Math.PI) / 180;
@@ -39,6 +42,33 @@ function bearingBetween(from: Coordinates, to: Coordinates) {
   return (toDegrees(Math.atan2(y, x)) + 360) % 360;
 }
 
+function distanceBetween(from: Coordinates, to: Coordinates) {
+  const earthRadiusMeters = 6371000;
+  const deltaLat = toRadians(to.latitude - from.latitude);
+  const deltaLng = toRadians(to.longitude - from.longitude);
+  const fromLat = toRadians(from.latitude);
+  const toLat = toRadians(to.latitude);
+  const a =
+    Math.sin(deltaLat / 2) * Math.sin(deltaLat / 2) +
+    Math.cos(fromLat) *
+      Math.cos(toLat) *
+      Math.sin(deltaLng / 2) *
+      Math.sin(deltaLng / 2);
+  return earthRadiusMeters * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function shouldSaveRoutePoint(previous: Coordinates | undefined, next: Coordinates) {
+  if (!previous) {
+    return true;
+  }
+
+  const movedMeters = distanceBetween(previous, next);
+  const accuracyMeters = next.accuracy ?? 0;
+  const jitterLimit = Math.min(Math.max(accuracyMeters, MIN_ROUTE_DISTANCE_METERS), MAX_NOISE_DISTANCE_METERS);
+
+  return movedMeters >= jitterLimit;
+}
+
 function formatDirection(heading?: number) {
   if (heading === undefined) {
     return 'Direction pending';
@@ -53,11 +83,21 @@ export default function RouteMapScreen() {
   const [points, setPoints] = useState<Coordinates[]>([]);
   const [status, setStatus] = useState('Waiting for location permission');
   const [watchId, setWatchId] = useState<number | null>(null);
-  const [routeSessionId] = useState(createRouteSessionId);
   const pointsRef = useRef<Coordinates[]>([]);
 
   useEffect(() => {
     let isMounted = true;
+
+    getSavedRoutePoints()
+      .then(savedPoints => {
+        if (!isMounted || savedPoints.length === 0) {
+          return;
+        }
+
+        pointsRef.current = savedPoints;
+        setPoints(savedPoints);
+      })
+      .catch(() => undefined);
 
     getPermissionState('location')
       .then(permission => {
@@ -91,6 +131,7 @@ export default function RouteMapScreen() {
   }, [watchId]);
 
   async function startTracking() {
+    const sessionId = await getRouteSessionId();
     const permission = await ensurePermission('location');
     if (!permission.granted) {
       setStatus(permission.message);
@@ -111,6 +152,11 @@ export default function RouteMapScreen() {
           capturedAt: new Date(position.timestamp).toISOString(),
         };
         const previous = pointsRef.current[pointsRef.current.length - 1];
+        if (!shouldSaveRoutePoint(previous, nextPoint)) {
+          setStatus('Waiting for movement');
+          return;
+        }
+
         const pointToSave = {
           ...nextPoint,
           heading: nextPoint.heading ?? (previous ? bearingBetween(previous, nextPoint) : undefined),
@@ -120,12 +166,13 @@ export default function RouteMapScreen() {
         pointsRef.current = [...pointsRef.current, pointToSave];
         setPoints(pointsRef.current);
         saveLastKnownCoordinates(pointToSave).catch(() => undefined);
-        uploadRoutePoint(routeSessionId, pointToSave).catch(() => undefined);
+        saveRoutePoints(pointsRef.current).catch(() => undefined);
+        uploadRoutePoint(sessionId, pointToSave).catch(() => undefined);
       },
       error => setStatus(error.message),
       {
         enableHighAccuracy: true,
-        distanceFilter: 2,
+        distanceFilter: 1,
         interval: 7000,
         fastestInterval: 4000,
         showLocationDialog: true,

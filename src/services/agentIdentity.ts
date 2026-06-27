@@ -26,14 +26,14 @@ function createUuid() {
   ].join('-');
 }
 
-export function getAgentId() {
-  const existing = localStorage.getString(AGENT_ID_KEY);
+export async function getAgentId() {
+  const existing = await localStorage.getString(AGENT_ID_KEY);
 
   if (existing) {
     return existing;
   }
 
   const agentId = `agent-${createUuid()}`;
-  localStorage.set(AGENT_ID_KEY, agentId);
+  await localStorage.set(AGENT_ID_KEY, agentId);
   return agentId;
 }

@@ -11,11 +11,11 @@ class QueueStore {
 
   async hydrate() {
     try {
-      const raw = localStorage.getString(QUEUE_KEY);
+      const raw = await localStorage.getString(QUEUE_KEY);
       this.items = raw ? JSON.parse(raw) : [];
     } catch {
       this.items = [];
-      localStorage.remove(QUEUE_KEY);
+      await localStorage.delete(QUEUE_KEY);
     }
     this.emit();
   }
@@ -105,7 +105,7 @@ class QueueStore {
   }
 
   private async persist() {
-    localStorage.set(QUEUE_KEY, JSON.stringify(this.items));
+    await localStorage.set(QUEUE_KEY, JSON.stringify(this.items));
     this.emit();
   }
 

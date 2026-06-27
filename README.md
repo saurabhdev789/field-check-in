@@ -5,11 +5,11 @@ React Native Android app for field agents to capture a photo, GPS coordinate, an
 ## Features
 
 - Camera and location permission flows with rationale, first denial, permanent denial, and Settings redirect.
-- Persistent offline queue backed by MMKV, surviving app restarts.
+- Persistent offline queue backed by SQLite, surviving app restarts.
 - Visible queue status for `pending`, `uploading`, `success`, and `failed`.
 - Automatic sync on connectivity changes with NetInfo.
 - Firebase Firestore backend storing compressed photo payloads, check-in records, and route points.
-- Persistent generated agent identity stored in MMKV and attached to Firestore records as `agentId`.
+- Persistent generated agent identity stored in SQLite and attached to Firestore records as `agentId`.
 - Background sync/retry awareness through `react-native-background-fetch`.
 - Exponential retry backoff with jitter and a 30 minute cap.
 - Partial failure safe uploads: each queued item is uploaded independently, so successful items are marked `success` and are not retried when other items fail.
@@ -33,7 +33,7 @@ For Firebase:
 4. Place it at `android/app/google-services.json`.
 5. Enable Firestore in the Firebase console. Firebase Storage is not required for this demo build.
 
-Backend writes are centralized in `src/services/backend.ts`. The app generates an `agentId` once, stores it in MMKV, and attaches it to every check-in and route point so Firestore data can be grouped per app install/field agent. The offline queue stores the local photo URI, then upload reads the file and stores a compressed base64 photo directly in the Firestore `checkIns` collection with the note, location, retry metadata, audit trail, and `agentId`. Live route tracking writes each captured point to the Firestore `routePoints` collection with the same `agentId`, a route session id, coordinate, accuracy, client timestamp, and server timestamp.
+Backend writes are centralized in `src/services/backend.ts`. The app generates an `agentId` once, stores it in SQLite, and attaches it to every check-in and route point so Firestore data can be grouped per app install/field agent. The offline queue stores the local photo URI, then upload reads the file and stores a compressed base64 photo directly in the Firestore `checkIns` collection with the note, location, retry metadata, audit trail, and `agentId`. Live route tracking writes each captured point to the Firestore `routePoints` collection with the same `agentId`, a route session id, coordinate, accuracy, client timestamp, and server timestamp.
 
 ## Android APK
 
@@ -74,10 +74,10 @@ The sync worker processes at most 5 ready items per pass. Each item is committed
 
 ## PII Handling Strategy
 
-- Photos are compressed on capture. The MMKV queue stores the photo URI, and Firestore stores the base64 image for this assignment build.
+- Photos are compressed on capture. The SQLite queue stores the photo URI, and Firestore stores the base64 image for this assignment build.
 - Firestore documents have a 1 MiB size limit, so production photo uploads should use Firebase Storage, Cloud Storage, or another object store.
 - GPS coordinates are captured when the agent submits or starts route tracking. Check-in coordinates are queued locally; route points are sent to Firestore as live tracking events.
-- A generated `agentId` is persisted in MMKV and included with records for demo-level per-agent grouping. Production should replace this with an authenticated user id such as Firebase Auth `uid`.
+- A generated `agentId` is persisted in SQLite and included with records for demo-level per-agent grouping. Production should replace this with an authenticated user id such as Firebase Auth `uid`.
 - The queue stores the minimum fields needed for retry and auditability: note, photo URI, coordinate, timestamps, attempts, and upload status.
 - No tokens or secrets are hardcoded. The Firebase Android config is supplied through `android/app/google-services.json`, and the Google Maps key should be build-time configuration in production.
 - The README intentionally documents where PII flows: `src/services/backend.ts`, `src/services/location.ts`, and `src/services/queueStore.ts`.

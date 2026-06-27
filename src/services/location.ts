@@ -5,6 +5,10 @@ import {localStorage} from './localStorage';
 const LAST_KNOWN_LOCATION_KEY = 'field-check-in.last-known-location.v1';
 
 type LocationOptions = Parameters<typeof Geolocation.getCurrentPosition>[2];
+type CurrentCoordinatesOptions = {
+  allowCachedFallback?: boolean;
+  requireFresh?: boolean;
+};
 
 function toCoordinates(position: {
   coords: {
@@ -42,54 +46,75 @@ function requestCoordinates(options: LocationOptions): Promise<Coordinates> {
 }
 
 export async function saveLastKnownCoordinates(coordinates: Coordinates) {
-  localStorage.set(LAST_KNOWN_LOCATION_KEY, JSON.stringify(coordinates));
+  await localStorage.set(LAST_KNOWN_LOCATION_KEY, JSON.stringify(coordinates));
 }
 
 export async function getLastKnownCoordinates() {
-  const raw = localStorage.getString(LAST_KNOWN_LOCATION_KEY);
+  const raw = await localStorage.getString(LAST_KNOWN_LOCATION_KEY);
   return raw ? (JSON.parse(raw) as Coordinates) : undefined;
 }
 
-export async function getCurrentCoordinates(): Promise<Coordinates> {
-  const attempts: LocationOptions[] = [
-    {
-      enableHighAccuracy: true,
-      timeout: 3000,
-      maximumAge: 60 * 60 * 1000,
-      forceRequestLocation: false,
-      showLocationDialog: true,
-    },
-    {
-      enableHighAccuracy: true,
-      timeout: 20000,
-      maximumAge: 30000,
-      forceRequestLocation: true,
-      showLocationDialog: true,
-    },
-    {
-      enableHighAccuracy: false,
-      timeout: 10000,
-      maximumAge: 60 * 60 * 1000,
-      forceRequestLocation: false,
-      showLocationDialog: true,
-    },
-  ];
+export async function getCurrentCoordinates(
+  options: CurrentCoordinatesOptions = {},
+): Promise<Coordinates> {
+  const attempts: LocationOptions[] = options.requireFresh
+    ? [
+        {
+          enableHighAccuracy: true,
+          timeout: 20000,
+          maximumAge: 0,
+          forceRequestLocation: true,
+          showLocationDialog: true,
+        },
+        {
+          enableHighAccuracy: false,
+          timeout: 10000,
+          maximumAge: 0,
+          forceRequestLocation: true,
+          showLocationDialog: true,
+        },
+      ]
+    : [
+        {
+          enableHighAccuracy: true,
+          timeout: 3000,
+          maximumAge: 60 * 60 * 1000,
+          forceRequestLocation: false,
+          showLocationDialog: true,
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 20000,
+          maximumAge: 30000,
+          forceRequestLocation: true,
+          showLocationDialog: true,
+        },
+        {
+          enableHighAccuracy: false,
+          timeout: 10000,
+          maximumAge: 60 * 60 * 1000,
+          forceRequestLocation: false,
+          showLocationDialog: true,
+        },
+      ];
 
   let lastError: unknown;
-  for (const options of attempts) {
+  for (const attemptOptions of attempts) {
     try {
-      return await requestCoordinates(options);
+      return await requestCoordinates(attemptOptions);
     } catch (error) {
       lastError = error;
     }
   }
 
-  const cached = await getLastKnownCoordinates();
-  if (cached) {
-    return {
-      ...cached,
-      capturedAt: new Date().toISOString(),
-    };
+  if (options.allowCachedFallback !== false) {
+    const cached = await getLastKnownCoordinates();
+    if (cached) {
+      return {
+        ...cached,
+        capturedAt: new Date().toISOString(),
+      };
+    }
   }
 
   throw lastError;

@@ -21,18 +21,39 @@ jest.mock('react-native-fs', () => ({
   readFile: jest.fn(() => Promise.resolve('base64-photo')),
 }));
 
-jest.mock('react-native-mmkv', () => {
+jest.mock('react-native-sqlite-storage', () => {
   const store = new Map();
+  const db = {
+    executeSql: jest.fn((sql, params = []) => {
+      const normalized = sql.trim().toUpperCase();
+
+      if (normalized.startsWith('SELECT')) {
+        const value = store.get(params[0]);
+        return Promise.resolve([
+          {
+            rows: {
+              length: value === undefined ? 0 : 1,
+              item: jest.fn(() => ({value})),
+            },
+          },
+        ]);
+      }
+
+      if (normalized.startsWith('INSERT')) {
+        store.set(params[0], params[1]);
+      }
+
+      if (normalized.startsWith('DELETE')) {
+        store.delete(params[0]);
+      }
+
+      return Promise.resolve([{rows: {length: 0, item: jest.fn()}}]);
+    }),
+  };
+
   return {
-    createMMKV: jest.fn(() => ({
-      getString: jest.fn(key => store.get(key)),
-      set: jest.fn((key, value) => {
-        store.set(key, value);
-      }),
-      remove: jest.fn(key => {
-        store.delete(key);
-      }),
-    })),
+    enablePromise: jest.fn(),
+    openDatabase: jest.fn(() => Promise.resolve(db)),
   };
 });
 

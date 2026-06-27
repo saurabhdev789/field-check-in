@@ -3,7 +3,9 @@ import {
   Alert,
   FlatList,
   Image,
+  Linking,
   Pressable,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -29,6 +31,28 @@ function createId() {
   return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
+function openLocationSettings() {
+  if (Platform.OS === 'android') {
+    Linking.sendIntent('android.settings.LOCATION_SOURCE_SETTINGS').catch(() =>
+      Linking.openSettings(),
+    );
+    return;
+  }
+
+  Linking.openSettings();
+}
+
+function showLocationRequiredDialog() {
+  Alert.alert(
+    'Turn on Location',
+    'Please turn on phone Location/GPS, then try check-in again.',
+    [
+      {text: 'Not now', style: 'cancel'},
+      {text: 'Open Settings', onPress: openLocationSettings},
+    ],
+  );
+}
+
 export default function CheckInScreen({navigation}: Props) {
   const [note, setNote] = useState('');
   const [photo, setPhoto] = useState<Asset>();
@@ -38,7 +62,7 @@ export default function CheckInScreen({navigation}: Props) {
     location: 'Not checked',
   });
   const [networkLabel, setNetworkLabel] = useState('Checking network');
-  const [agentId] = useState(getAgentId);
+  const [agentId, setAgentId] = useState('Loading agent...');
   const [biometricLabel, setBiometricLabel] = useState('Not set up');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -50,6 +74,14 @@ export default function CheckInScreen({navigation}: Props) {
       );
     });
     const unsubscribeWatch = watchConnectivity();
+    getAgentId().then(setAgentId).catch(() => setAgentId('Agent unavailable'));
+    ensurePermission('location')
+      .then(result =>
+        setPermissions(current => ({...current, location: result.message})),
+      )
+      .catch(() =>
+        setPermissions(current => ({...current, location: 'Location not allowed'})),
+      );
     syncQueue().catch(() => undefined);
 
     return () => {
@@ -82,7 +114,7 @@ export default function CheckInScreen({navigation}: Props) {
 
     const cameraResult = await launchCamera({
       mediaType: 'photo',
-      cameraType: 'back',
+      cameraType: 'front',
       quality: 0.3,
       maxWidth: 640,
       maxHeight: 640,
@@ -121,11 +153,23 @@ export default function CheckInScreen({navigation}: Props) {
         return;
       }
 
-      const location = await getCurrentCoordinates();
+      let location;
+      try {
+        location = await getCurrentCoordinates({
+          allowCachedFallback: false,
+          requireFresh: true,
+        });
+      } catch {
+        setPermissions(current => ({...current, location: 'Turn on Location/GPS'}));
+        showLocationRequiredDialog();
+        return;
+      }
+
+      const currentAgentId = await getAgentId();
       const now = new Date().toISOString();
       const checkIn: CheckInItem = {
         id: createId(),
-        agentId,
+        agentId: currentAgentId,
         note: note.trim(),
         photoUri: photo.uri,
         photoFileName: photo.fileName,
@@ -157,12 +201,16 @@ export default function CheckInScreen({navigation}: Props) {
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <View style={styles.toolbar}>
-        <View>
+        <View style={styles.agentStatus}>
           <Text style={styles.kicker}>Agent status</Text>
           <Text style={styles.network}>{networkLabel}</Text>
-          <Text style={styles.meta}>{agentId}</Text>
+          <Text style={styles.agentId} numberOfLines={1} ellipsizeMode="middle">
+            {agentId}
+          </Text>
         </View>
-        <Pressable style={styles.secondaryButton} onPress={() => navigation.navigate('RouteMap')}>
+        <Pressable
+          style={[styles.secondaryButton, styles.routeButton]}
+          onPress={() => navigation.navigate('RouteMap')}>
           <Text style={styles.secondaryButtonText}>Route Map</Text>
         </Pressable>
       </View>
@@ -262,6 +310,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: 12,
+  },
+  agentStatus: {
+    flex: 1,
+    minWidth: 0,
   },
   kicker: {
     color: '#60736d',
@@ -337,6 +390,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 11,
   },
+  routeButton: {
+    flexShrink: 0,
+  },
   secondaryButtonText: {
     color: '#1d6f61',
     fontWeight: '800',
@@ -350,6 +406,11 @@ const styles = StyleSheet.create({
   meta: {
     color: '#4f625d',
     fontSize: 13,
+  },
+  agentId: {
+    color: '#4f625d',
+    fontSize: 12,
+    maxWidth: '100%',
   },
   queueHeader: {
     flexDirection: 'row',

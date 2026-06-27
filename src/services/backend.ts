@@ -14,6 +14,7 @@ function normalizeFilePath(uri: string) {
 
 export async function uploadCheckIn(item: CheckInItem) {
   const photoBase64 = await RNFS.readFile(normalizeFilePath(item.photoUri), 'base64');
+  const agentId = item.agentId ?? (await getAgentId());
 
   if (photoBase64.length > MAX_FIRESTORE_PHOTO_BASE64_BYTES) {
     throw new Error('Photo is too large for Firestore. Retake a smaller photo.');
@@ -25,7 +26,7 @@ export async function uploadCheckIn(item: CheckInItem) {
     .set(
       {
         id: item.id,
-        agentId: item.agentId ?? getAgentId(),
+        agentId,
         note: item.note,
         photo: {
           base64: photoBase64,
@@ -50,10 +51,12 @@ export async function uploadCheckIn(item: CheckInItem) {
 }
 
 export async function uploadRoutePoint(sessionId: string, point: Coordinates) {
+  const agentId = await getAgentId();
+
   await firestore()
     .collection(ROUTE_POINTS_COLLECTION)
     .add({
-      agentId: getAgentId(),
+      agentId,
       sessionId,
       location: {
         latitude: point.latitude,
