@@ -11,6 +11,9 @@ const initialRegion: Region = {
   latitudeDelta: 0.02,
   longitudeDelta: 0.02,
 };
+const MIN_ROUTE_LATITUDE_DELTA = 0.015;
+const MIN_ROUTE_LONGITUDE_DELTA = 0.015;
+const ROUTE_DELTA_PADDING = 1.6;
 
 function formatDirection(heading?: number) {
   if (heading === undefined) {
@@ -20,6 +23,28 @@ function formatDirection(heading?: number) {
   const labels = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
   const index = Math.round(heading / 45) % labels.length;
   return `${labels[index]} ${Math.round(heading)}°`;
+}
+
+function regionForPoints(points: Coordinates[]): Region {
+  const latitudes = points.map(point => point.latitude);
+  const longitudes = points.map(point => point.longitude);
+  const minLatitude = Math.min(...latitudes);
+  const maxLatitude = Math.max(...latitudes);
+  const minLongitude = Math.min(...longitudes);
+  const maxLongitude = Math.max(...longitudes);
+
+  return {
+    latitude: (minLatitude + maxLatitude) / 2,
+    longitude: (minLongitude + maxLongitude) / 2,
+    latitudeDelta: Math.max(
+      (maxLatitude - minLatitude) * ROUTE_DELTA_PADDING,
+      MIN_ROUTE_LATITUDE_DELTA,
+    ),
+    longitudeDelta: Math.max(
+      (maxLongitude - minLongitude) * ROUTE_DELTA_PADDING,
+      MIN_ROUTE_LONGITUDE_DELTA,
+    ),
+  };
 }
 
 export default function RouteMapScreen() {
@@ -43,10 +68,7 @@ export default function RouteMapScreen() {
     }
 
     const timeout = setTimeout(() => {
-      mapRef.current?.fitToCoordinates(points, {
-        edgePadding: {top: 80, right: 50, bottom: 150, left: 50},
-        animated: true,
-      });
+      mapRef.current?.animateToRegion(regionForPoints(points), 450);
     }, 250);
 
     return () => clearTimeout(timeout);
